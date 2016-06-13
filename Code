@@ -1,0 +1,180 @@
+## Load libraries
+        library(XLConnect)
+        library(dplyr)
+        library(ggplot2)
+        library(rgdal)
+        library(stringdist)
+        library(tmap)
+
+## Reading and cleaning data
+        wb<-loadWorkbook("Ruidos-RM-Carab.xlsx")        # Read the WorkBook
+        rdataCarab<-readWorksheet(wb,"BASE")            # Read the sheet "BASE"
+        colnames(rdataCarab)                            # Show all the columns
+        # (the column "DENUNCIAS" represents the number of complaints at the same place)
+
+        Cdata<-filter(rdataCarab, rdataCarab$DES_DELITO=="RUIDOS MOLESTOS")
+        # Select the rows related to "RUIDOS MOLESTOS" in "DES_DELITO" column
+
+        # Fixing fails in Municipalities names which have the letter "Ñ"
+        Cdata$DES_COMUNA<-gsub("PEÐALOLEN", "PEÑALOLEN", Cdata$DES_COMUNA)
+        Cdata$DES_COMUNA<-gsub("ÐUÐOA", "ÑUÑOA", Cdata$DES_COMUNA)
+        Cdata$DES_COMUNA<-gsub("PEÐAFLOR", "PEÑAFLOR", Cdata$DES_COMUNA)
+
+## Complaints by Year
+        # Calculating the Total number of Noise Complaints (TNC) by year
+        SUMA_NC<-round(aggregate(DENUNCIAS ~ ANO, data = Cdata, FUN = sum,0))
+        # Calculating the Total number Places with Noise Complaints (PNC) by year
+        LARGO_NC<-round(aggregate(DENUNCIAS ~ ANO, data = Cdata, FUN = length),0)
+        Tabla<-data.frame(Anho=SUMA_NC$ANO, DENUNCIAS = c(SUMA_NC$DENUNCIAS, LARGO_NC$DENUNCIAS), 
+                factor=rep(c("TNC", "PNC"), each=6))
+
+        # Plotting
+        par(mar=c(11, 30, 0, 0))
+        g40<-ggplot(Tabla, aes(x=Anho, y=DENUNCIAS), fill=factor(factor)) + 
+                geom_bar(aes(fill=factor(factor)), stat="identity", col="black", 
+                        position=position_identity(), width=0.9) +
+                guides(fill=guide_legend(reverse=TRUE))
+        g40 +
+                theme_bw() + 
+                scale_fill_brewer(name="Counting type") + 
+                theme(legend.position="right", axis.text.x=element_text(vjust=0.5, size=12), 
+                        axis.text.y=element_text(vjust=0.5, size=12), 
+                        axis.title.x = element_text(face="bold", size=16, margin=margin(10,0,0,0)), 
+                        axis.title.y=element_text(face="bold", size=16, margin=margin(0,15,0,0))) +
+                geom_text(aes(label=DENUNCIAS), vjust=1.2, colour="black", 
+                          position=position_dodge(0.9), size=4.5, fontface="bold") + 
+                labs(x="Years", y="Noise complaints") +
+                scale_x_continuous(breaks=seq(2010,2015,1)) +
+                scale_y_continuous(expand = c(0, 100))
+
+        dev.copy(png, file="plot1.png", width = 1200, height = 800, units = "px", res=160)
+        dev.off()
+
+## Complaints by Month
+        Cdata$MES<-as.numeric(Cdata$MES) # The column MES as number
+        SUM_MESC<-round(aggregate(DENUNCIAS ~ ANO+MES, data = Cdata, FUN = sum),0)
+        # (Calculating TNC by year and by month)
+        
+        MEAN_MESC<-round(aggregate(DENUNCIAS ~ MES, data = SUM_MESC, FUN = mean),0)
+        # (Calculating TNC by month for all range of 6 years)
+
+        par(mar=c(3, 4, 1, 1), mgp = c(1.8, 0.1, 0))
+        p52<-boxplot(DENUNCIAS~MES, data=SUM_MESC, xlab="Months", ylab="Noise complaints", 
+                     ylim=c(100,max(SUM_MESC[,3])*1.05), xaxt="n", yaxt="n")
+        axis(2, las=0, cex.axis=0.7, las=2, tck=.01)
+        axis(1, at=1:12, cex.axis=0.8, las=0, tck=0.01)
+        points(MEAN_MESC[,2], col="red", pch=19)
+        
+        dev.copy(png, file="plot2.png", width = 1200, height = 800, units = "px", res=120)
+        dev.off()
+
+## Complaints by Municipality
+        # Calculating complaints by Municipality
+        COrd2<-group_by(Cdata, ANO, DES_COMUNA, DENUNCIAS)
+        LengthC2<-summarise_each(COrd2,funs(length))
+        # Calculating TNC by Municipality for all range of 6 years
+        LengthCOK2<-aggregate(TRIM*DENUNCIAS ~ ANO + DES_COMUNA, data = LengthC2, FUN = sum)
+        colnames(LengthCOK2)[3]<-"SUMA"
+        LengthCOK3<-aggregate(SUMA ~ DES_COMUNA, data = LengthCOK2, FUN = mean)
+        # Calculating PNC by Municipality for all range of 6 years
+        LengthCOK4<-aggregate(TRIM ~ ANO + DES_COMUNA, data = LengthC2, FUN = sum)
+        LengthCOK5<-aggregate(TRIM ~ DES_COMUNA, data = LengthCOK4, FUN = mean)
+
+        # Plotting
+        par(mfrow=c(2,1))
+        par(cex=0.6, cex.axis=0.8)
+        par(mar = c(0, 5, 1, 1), oma = c(9, 0, 0, 0), mgp=c(3, 0.3, 0), xaxs="i")
+        p60<-barplot(LengthCOK3[,2], col="yellow", width = 0.5, ylim=c(0,max(LengthCOK3[,2])*1.2), 
+                     las=2, cex.names = 0.6, ylab="TNC")
+        text(x=p60, y=LengthCOK3[,2], label=round(LengthCOK3[,2],0), pos=3, cex=0.7, col="blue")
+        box()
+
+        p61<-barplot(LengthCOK5[,2], col="yellow", width = 0.5, ylim=c(0,max(LengthCOK5[,2])*1.15),
+                     las=2, cex.names = 0.6, ylab="PNC", names.arg=LengthCOK5[,1])
+        text(x=p60, y=LengthCOK5[,2], label=round(LengthCOK5[,2],0), pos=3, cex=0.7, col="red")
+        box()
+
+        dev.copy(png, file="plot3.png", width = 1200, height = 800, units = "px", res=180)
+        dev.off()
+
+        # TNC/PNC ratio
+        Razon<-LengthCOK3[,2]/LengthCOK5[,2]
+        RazonCSV<-as.data.frame(cbind(LengthCOK3[,1],Razon))
+
+## Map 
+        # Reading RM population info (only 34 communes of Gran Santigo Urbano) 
+        # downloaded from "http://www.asrm.cl/archivoContenidos/poblacion-total-rm-2013.pdf"
+        pob<-read.csv("poblacion34.csv")
+        colnames(pob)[2]<-"POB"
+        comunas<-as.character(pob[,1]) # column with names of communes as character
+        comunas<-gsub("PAC", "PEDRO AGUIRRE CERDA", comunas) # Fix a commune name
+        
+        # Calculating % of complaints in 34 communes related to total (52 communes of RM)
+        CT<-group_by(Cdata, DES_COMUNA, DENUNCIAS) 
+        LengthCT<-summarise_each(CT,funs(length))
+        LengthCOKT<-aggregate(TRIM*DENUNCIAS ~ DES_COMUNA, data = LengthCT, FUN = sum)
+        # (Calculating TNC by commune for all range of 6 years)
+        colnames(LengthCOKT)[2]<-"SUMA"
+        Suma34C<-(sum(LengthCOKT[amatch(comunas, LengthCOKT[,1], maxDist=2, nomatch = 0),2]))
+        # (Sum of TNC for 34 communes)
+        Suma52C<-sum(LengthCOKT[,2]) # Sum of TNC for 52 communes of RM
+        Porcentaje<-Suma34C/Suma52C*100 # %
+        
+        # Reading SHAPE file with polygons of Municipalities
+        # Downloaded from "http://siit2.bcn.cl/mapas_vectoriales" Pay attention to path & file name. 
+        # In addition to .SHP file, you need the files with extension .SHX and .DBF
+        sh<-readOGR(dsn=path.expand("~/R/AcusRM/division_comunal.shp"), 
+                    layer="division_comunal", stringsAsFactors=F)
+        # Edition and cleaning of names of communes from SHAPE file
+        shC<-sh$NOM_COM
+        shC<-toupper(shC)
+        shC<-gsub("Ã[±]", "Ñ", shC)
+        shC<-gsub("Ã[‘]", "Ñ", shC)
+        shC<-gsub("Ã[¡]", "Á", shC)
+        shC<-gsub("Ã[©]", "É", shC)
+        shC<-gsub("Ã[³]", "Ó", shC)
+        shC<-gsub("Ã[º]", "Ú", shC)
+        shC<-gsub("Ã", "Í", shC)
+        
+        # Matching communes of RM and their selection
+        matchcomunas<-amatch(comunas, shC, maxDist=2, nomatch = 0)
+        RM.df<-fortify(sh[matchcomunas,])
+        # (Create a data frame with info of polygons of RM's communes and their values of complaints)
+
+        # Complaints (TNC) by population
+        datamapa34<-LengthCOK3[amatch(comunas, LengthCOK3[,1], maxDist=2, nomatch = 0),]
+        # (select TNC in 34 communes of RM)
+        DenC_Pob<-as.data.frame(as.numeric(datamapa34[,2]/pob[,2]*100000)) 
+        # (Correction by population: annual average TNC each 100.000 inhabitants)
+        colnames(DenC_Pob)[1]<-"DATO"
+        NoiseC.df<-data.frame(id=unique(RM.df[,'id']), NoiseC=DenC_Pob[,'DATO'])
+
+        # Get out the commune "LO BARNECHEA" (only due spatial reasons)
+        comunasB<-comunas[which(comunas!="LO BARNECHEA" )]
+        matchcomunasB<-amatch(comunasB, shC, maxDist=2, nomatch = 0)
+        RM.dfB<-fortify(sh[matchcomunasB,])
+        datamapa33<-LengthCOK3[amatch(comunasB, LengthCOK3[,1], maxDist=2, nomatch = 0),]
+        pobB<-pob[which(pob[,1]!="LO BARNECHEA"),]
+        DenC_PobB<-as.data.frame(as.numeric(datamapa33[,2]/pobB[,2]*100000))
+        colnames(DenC_PobB)[1]<-"DATO"
+        NoiseC.dfB<-data.frame(id=unique(RM.dfB[,'id']), NoiseC=DenC_PobB[,'DATO'])
+
+        # Plotting
+        vignette(package = "tmap")
+        vignette("tmap-nutshell")
+        sh@data$COD_COMUNA[matchcomunasB]<-NoiseC.dfB[,2]
+        sh@data$NOM_COM[matchcomunasB]<-comunasB
+        matchF<-cbind(matchcomunasB,NoiseC.dfB[2])
+        matchF<-arrange(matchF,desc(NoiseC))
+        tm_shape(sh[matchF$matchcomunasB,], inner.margins=c(0,0,0,0)) +
+                tm_fill("COD_COMUNA", palette = "Reds", max.categories = 6, 
+                        breaks=c(0, 50, 100, 150, 200, 250, 300), 
+                        labels=c("00-49", "50-99", "100-149", "150-199", "200-249", "250-299"), 
+                        auto.palette.mapping=F, title="") +
+                tm_borders(col = "darkgrey") +
+                tm_text("NOM_COM", size="AREA", root=4, scale=0.5) +
+                tm_layout(legend.position = c("right", "bottom"), legend.title.size = 0.3, 
+                          legend.text.size=0.3, legend.frame=TRUE, outer.margins=c(0,0,0,0), asp=0)
+
+        dev.copy(png, file="plot4.png", width = 1400, height = 1080, units = "px", res=230)
+        dev.off()
