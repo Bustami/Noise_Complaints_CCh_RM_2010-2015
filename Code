@@ -15,7 +15,7 @@
         Cdata<-filter(rdataCarab, rdataCarab$DES_DELITO=="RUIDOS MOLESTOS")
         # Select the rows related to "RUIDOS MOLESTOS" in "DES_DELITO" column
 
-        # Fixing fails in Municipalities names which have the letter "Ñ"
+        # Fixing fails in municipalities names which have the letter "Ñ"
         Cdata$DES_COMUNA<-gsub("PEÐALOLEN", "PEÑALOLEN", Cdata$DES_COMUNA)
         Cdata$DES_COMUNA<-gsub("ÐUÐOA", "ÑUÑOA", Cdata$DES_COMUNA)
         Cdata$DES_COMUNA<-gsub("PEÐAFLOR", "PEÑAFLOR", Cdata$DES_COMUNA)
@@ -58,6 +58,7 @@
         MEAN_MESC<-round(aggregate(DENUNCIAS ~ MES, data = SUM_MESC, FUN = mean),0)
         # (Calculating TNC by month for all range of 6 years)
 
+        # Plotting
         par(mar=c(3, 4, 1, 1), mgp = c(1.8, 0.1, 0))
         p52<-boxplot(DENUNCIAS~MES, data=SUM_MESC, xlab="Months", ylab="Noise complaints", 
                      ylim=c(100,max(SUM_MESC[,3])*1.05), xaxt="n", yaxt="n")
@@ -109,23 +110,23 @@
         comunas<-as.character(pob[,1]) # column with names of communes as character
         comunas<-gsub("PAC", "PEDRO AGUIRRE CERDA", comunas) # Fix a commune name
         
-        # Calculating % of complaints in 34 communes related to total (52 communes of RM)
+        # Calculating % of complaints in 34 municipalities related to total (52 communes of RM)
         CT<-group_by(Cdata, DES_COMUNA, DENUNCIAS) 
         LengthCT<-summarise_each(CT,funs(length))
         LengthCOKT<-aggregate(TRIM*DENUNCIAS ~ DES_COMUNA, data = LengthCT, FUN = sum)
-        # (Calculating TNC by commune for all range of 6 years)
+        # (Calculating TNC by municipality for all range of 6 years)
         colnames(LengthCOKT)[2]<-"SUMA"
         Suma34C<-(sum(LengthCOKT[amatch(comunas, LengthCOKT[,1], maxDist=2, nomatch = 0),2]))
-        # (Sum of TNC for 34 communes)
-        Suma52C<-sum(LengthCOKT[,2]) # Sum of TNC for 52 communes of RM
+        # (Sum of TNC for 34 municipalities)
+        Suma52C<-sum(LengthCOKT[,2]) # Sum of TNC for 52 municipalities of RM
         Porcentaje<-Suma34C/Suma52C*100 # %
         
-        # Reading SHAPE file with polygons of Municipalities
+        # Reading SHAPE file with polygons of municipalities
         # Downloaded from "http://siit2.bcn.cl/mapas_vectoriales" Pay attention to path & file name. 
         # In addition to .SHP file, you need the files with extension .SHX and .DBF
         sh<-readOGR(dsn=path.expand("~/R/AcusRM/division_comunal.shp"), 
                     layer="division_comunal", stringsAsFactors=F)
-        # Edition and cleaning of names of communes from SHAPE file
+        # Edition and cleaning of names of municipalities from SHAPE file
         shC<-sh$NOM_COM
         shC<-toupper(shC)
         shC<-gsub("Ã[±]", "Ñ", shC)
@@ -136,20 +137,20 @@
         shC<-gsub("Ã[º]", "Ú", shC)
         shC<-gsub("Ã", "Í", shC)
         
-        # Matching communes of RM and their selection
+        # Matching municipalities of RM and their selection
         matchcomunas<-amatch(comunas, shC, maxDist=2, nomatch = 0)
         RM.df<-fortify(sh[matchcomunas,])
-        # (Create a data frame with info of polygons of RM's communes and their values of complaints)
+        # (Create a data frame with info of polygons of RM's municipalities and their values of complaints)
 
         # Complaints (TNC) by population
         datamapa34<-LengthCOK3[amatch(comunas, LengthCOK3[,1], maxDist=2, nomatch = 0),]
-        # (select TNC in 34 communes of RM)
+        # (select TNC in 34 municipalities of RM)
         DenC_Pob<-as.data.frame(as.numeric(datamapa34[,2]/pob[,2]*100000)) 
         # (Correction by population: annual average TNC each 100.000 inhabitants)
         colnames(DenC_Pob)[1]<-"DATO"
         NoiseC.df<-data.frame(id=unique(RM.df[,'id']), NoiseC=DenC_Pob[,'DATO'])
 
-        # Get out the commune "LO BARNECHEA" (only due spatial reasons)
+        # Get out the municipality "LO BARNECHEA" (only due spatial reasons)
         comunasB<-comunas[which(comunas!="LO BARNECHEA" )]
         matchcomunasB<-amatch(comunasB, shC, maxDist=2, nomatch = 0)
         RM.dfB<-fortify(sh[matchcomunasB,])
@@ -174,7 +175,7 @@
                 tm_borders(col = "darkgrey") +
                 tm_text("NOM_COM", size="AREA", root=4, scale=0.5) +
                 tm_layout(legend.position = c("right", "bottom"), legend.title.size = 0.3, 
-                          legend.text.size=0.3, legend.frame=TRUE, outer.margins=c(0,0,0,0), asp=0)
+                          legend.text.size=0.5, legend.frame=TRUE, outer.margins=c(0,0,0,0), asp=0)
 
         dev.copy(png, file="plot4.png", width = 1400, height = 1080, units = "px", res=230)
         dev.off()
